@@ -1,16 +1,36 @@
 import logging
 
 from maya import OpenMayaUI
-import shiboken2
 
 try:
+    import shiboken2
     from PySide2 import QtCore, QtGui, QtWidgets
-except ImportError:
-    from PySide6 import QtCore, QtGui, QtWidgets
+    QRegExp = QtCore.QRegExp
 
+    def get_text_document(script_editor_output_object):
+        script_editor_output_widget = shiboken2.wrapInstance(
+            int(script_editor_output_object), QtWidgets.QTextEdit
+        )
+        document = script_editor_output_widget.document()
+        return document, script_editor_output_widget
+
+except ImportError:
+    import shiboken6
+    from PySide6 import QtCore, QtGui, QtWidgets
+    QRegExp = QtCore.QRegularExpression
+
+    def get_text_document(script_editor_output_object):
+        # TODO : this might not work as expected since it appears to freeze Maya after attaching the highlighter to the TextDocument.
+        script_editor_output_widget = shiboken6.wrapInstance(
+            int(script_editor_output_object), QtWidgets.QWidget
+        )
+        for child in script_editor_output_widget.children():
+            for each in child.children():
+                if isinstance(each, QtGui.QTextDocument):
+                    return each, script_editor_output_widget
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 class StdOut_Syntax(QtGui.QSyntaxHighlighter):
@@ -20,19 +40,19 @@ class StdOut_Syntax(QtGui.QSyntaxHighlighter):
     kGreen = QtGui.QColor(35, 170, 30)
     kBlue = QtGui.QColor(35, 160, 255)
 
-    rx_error = QtCore.QRegExp(r"[Ee][Rr][Rr][Oo][Rr]")
+    rx_error = QRegExp(r"[Ee][Rr][Rr][Oo][Rr]")
     error_format = QtGui.QTextCharFormat()
     error_format.setForeground(kRed)
 
-    rx_warning = QtCore.QRegExp(r"[Ww][Aa][Rr][Nn][Ii][Nn][Gg]")
+    rx_warning = QRegExp(r"[Ww][Aa][Rr][Nn][Ii][Nn][Gg]")
     warning_format = QtGui.QTextCharFormat()
     warning_format.setForeground(kOrange)
 
-    rx_debug = QtCore.QRegExp(r"[Dd][Ee][Bb][Uu][Gg]")
+    rx_debug = QRegExp(r"[Dd][Ee][Bb][Uu][Gg]")
     debug_format = QtGui.QTextCharFormat()
     debug_format.setForeground(kGreen)
 
-    rx_traceback_start = QtCore.QRegExp("Traceback \(most recent call last\)")
+    rx_traceback_start = QRegExp("Traceback \(most recent call last\)")
     traceback_format = QtGui.QTextCharFormat()
     traceback_format.setForeground(kBlue)
 
@@ -90,11 +110,9 @@ def __se_highlight():
         )
         if not script_editor_output_object:
             break
-        script_editor_output_widget = shiboken2.wrapInstance(
-            int(script_editor_output_object), QtWidgets.QTextEdit
-        )
-        logger.debug(script_editor_output_widget)
-        StdOut_Syntax(script_editor_output_widget.document())
+        document, script_editor_output_widget = get_text_document(
+            script_editor_output_object)
+        StdOut_Syntax(document)
         logger.debug("Done attaching highlighter to : %s" % script_editor_output_widget)
         i += 1
 
